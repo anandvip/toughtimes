@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Budget Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .card {
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+        }
+        input, select, button {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #debug-console {
+            background-color: #333;
+            color: #fff;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .toast {
+            background-color: #333;
+            color: #fff;
+            padding: 1rem;
+            margin-top: 0.5rem;
+            border-radius: 5px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>Family Budget Tracker</h1>
+            <div id="family-selection">
+                <h2>Select Family Member</h2>
+                <select id="family-member-select">
+                    <option value="">Select a family member</option>
+                </select>
+                <button id="add-family-member">Add New Member</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Budget Information</h2>
+            <input type="number" id="balance-input" placeholder="Enter starting balance">
+            <select id="budget-timeframe">
+                <option value="7">1 Week</option>
+                <option value="14">2 Weeks</option>
+                <option value="30">1 Month</option>
+                <option value="90">3 Months</option>
+                <option value="180">6 Months</option>
+                <option value="365">1 Year</option>
+            </select>
+            <button id="set-balance">Set Budget</button>
+            <p>Total Budget: <span id="total-budget">₹0</span></p>
+            <p>Daily Limit: <span id="daily-limit">₹0</span></p>
+        </div>
+        
+        <div class="card">
+            <h2>Add Expense</h2>
+            <input type="number" id="expense-amount" placeholder="Enter expense amount">
+            <select id="expense-category">
+                <option value="">Select category</option>
+                <option value="food">Food</option>
+                <option value="transportation">Transportation</option>
+                <option value="utilities">Utilities</option>
+                <option value="entertainment">Entertainment</option>
+                <option value="other">Other</option>
+            </select>
+            <button id="add-expense">Add Expense</button>
+        </div>
+        
+        <div class="card">
+            <h2>Current Status</h2>
+            <p>Remaining Balance: <span id="remaining-balance">₹0</span></p>
+            <p>Days Without Spending: <span id="days-without-spending">0</span></p>
+        </div>
+        
+        <div class="card">
+            <h2>Weekly Report</h2>
+            <div id="weekly-report"></div>
+        </div>
+    </div>
+    
+    <div id="debug-console"></div>
+
+    <!-- Modal for adding new family member -->
+    <div id="add-member-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Add New Family Member</h2>
+            <input type="text" id="new-member-name" placeholder="Enter name">
+            <button id="submit-new-member">Add Member</button>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
+    <script>
+        let familyMembers = [];
+        let currentMember = null;
+        let startingBalance = 0;
+        let budgetTimeframe = 30; // Default to 1 month
+        let expenses = [];
+
+        // DOM Elements
+        const familyMemberSelect = document.getElementById('family-member-select');
+        const addFamilyMemberBtn = document.getElementById('add-family-member');
+        const balanceInput = document.getElementById('balance-input');
+        const budgetTimeframeSelect = document.getElementById('budget-timeframe');
+        const setBalanceBtn = document.getElementById('set-balance');
+        const totalBudgetSpan = document.getElementById('total-budget');
+        const dailyLimitSpan = document.getElementById('daily-limit');
+        const expenseAmountInput = document.getElementById('expense-amount');
+        const expenseCategorySelect = document.getElementById('expense-category');
+        const addExpenseBtn = document.getElementById('add-expense');
+        const remainingBalanceSpan = document.getElementById('remaining-balance');
+        const daysWithoutSpendingSpan = document.getElementById('days-without-spending');
+        const weeklyReportDiv = document.getElementById('weekly-report');
+        const debugConsole = document.getElementById('debug-console');
+
+        // Modal elements
+        const addMemberModal = document.getElementById('add-member-modal');
+        const newMemberNameInput = document.getElementById('new-member-name');
+        const submitNewMemberBtn = document.getElementById('submit-new-member');
+        const closeModalBtn = addMemberModal.querySelector('.close');
+
+        // Toast container
+        const toastContainer = document.getElementById('toast-container');
+
+        // Helper function for debugging
+        function debug(message) {
+            debugConsole.innerHTML += `<p>${new Date().toLocaleTimeString()}: ${message}</p>`;
+            console.log(message);
+        }
+
+        // Show toast message
+        function showToast(message, duration = 3000) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            toastContainer.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toastContainer.removeChild(toast);
+                }, 500);
+            }, duration);
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            return `₹${amount.toFixed(2)}`;
+        }
+
+        // Load family members from storage
+        function loadFamilyMembers() {
+            const storedMembers = localStorage.getItem('familyMembers');
+            if (storedMembers) {
+                familyMembers = JSON.parse(storedMembers);
+                updateFamilyMemberSelect();
+            }
+            debug('Family members loaded from storage');
+            showToast('Family members loaded');
+        }
+
+        // Update family member select dropdown
+        function updateFamilyMemberSelect() {
+            familyMemberSelect.innerHTML = '<option value="">Select a family member</option>';
+            familyMembers.forEach(member => {
+                const option = document.createElement('option');
+                option.value = member.name;
+                option.textContent = member.name;
+                familyMemberSelect.appendChild(option);
+            });
+        }
+
+        // Add new family member
+        function addNewFamilyMember(name) {
+            if (name) {
+                familyMembers.push({ name, balance: 0, budgetTimeframe: 30 });
+                localStorage.setItem('familyMembers', JSON.stringify(familyMembers));
+                updateFamilyMemberSelect();
+                debug(`New family member added: ${name}`);
+                showToast(`New family member added: ${name}`);
+            }
+        }
+
+        // Set budget for current family member
+        function setBudget() {
+            if (currentMember) {
+                startingBalance = parseFloat(balanceInput.value);
+                budgetTimeframe = parseInt(budgetTimeframeSelect.value);
+                currentMember.balance = startingBalance;
+                currentMember.budgetTimeframe = budgetTimeframe;
+                localStorage.setItem('familyMembers', JSON.stringify(familyMembers));
+                updateBudgetInfo();
+                debug(`Budget set for ${currentMember.name}: ${formatCurrency(startingBalance)} for ${budgetTimeframe} days`);
+                showToast(`Budget set for ${currentMember.name}: ${formatCurrency(startingBalance)} for ${budgetTimeframe} days`);
+            } else {
+                showToast('Please select a family member first');
+            }
+        }
+
+        // Update budget information
+        function updateBudgetInfo() {
+            const dailyLimit = startingBalance / budgetTimeframe;
+            totalBudgetSpan.textContent = formatCurrency(startingBalance);
+            dailyLimitSpan.textContent = formatCurrency(dailyLimit);
+            updateRemainingBalance();
+        }
+
+        // Add expense
+        function addExpense() {
+            if (currentMember) {
+                const amount = parseFloat(expenseAmountInput.value);
+                const category = expenseCategorySelect.value;
+                if (amount && category) {
+                    expenses.push({ amount, category, date: new Date() });
+                    updateRemainingBalance();
+                    expenseAmountInput.value = '';
+                    expenseCategorySelect.value = '';
+                    debug(`Expense added: ${formatCurrency(amount)} for ${category}`);
+                    showToast(`Expense added: ${formatCurrency(amount)} for ${category}`);
+                } else {
+                    showToast('Please enter both amount and category');
+                }
+            } else {
+                showToast('Please select a family member first');
+            }
+        }
+
+        // Update remaining balance
+        function updateRemainingBalance() {
+            const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+            const remainingBalance = startingBalance - totalExpenses;
+            remainingBalanceSpan.textContent = formatCurrency(remainingBalance);
+            updateDaysWithoutSpending();
+        }
+
+        // Update days without spending
+        function updateDaysWithoutSpending() {
+            if (expenses.length === 0) {
+                daysWithoutSpendingSpan.textContent = '0';
+                return;
+            }
+            const lastExpenseDate = new Date(Math.max(...expenses.map(e => new Date(e.date))));
+            const today = new Date();
+            const diffTime = Math.abs(today - lastExpenseDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            daysWithoutSpendingSpan.textContent = diffDays.toString();
+        }
+
+        // Generate weekly report
+        function generateWeeklyReport() {
+            const oneWeekAgo = new Date();
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            const weeklyExpenses = expenses.filter(expense => new Date(expense.date) >= oneWeekAgo);
+            const totalSpent = weeklyExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+            const categoryTotals = weeklyExpenses.reduce((totals, expense) => {
+                totals[expense.category] = (totals[expense.category] || 0) + expense.amount;
+                return totals;
+            }, {});
+
+            let report = `<h3>Weekly Report</h3>
+                          <p>Total Spent: ${formatCurrency(totalSpent)}</p>
+                          <h4>Category Breakdown:</h4>
+                          <ul>`;
+            for (const [category, amount] of Object.entries(categoryTotals)) {
+                report += `<li>${category}: ${formatCurrency(amount)}</li>`;
+            }
+            report += '</ul>';
+
+            weeklyReportDiv.innerHTML = report;
+            debug('Weekly report generated');
+            showToast('Weekly report generated');
+        }
+
+        // Initialize application
+        loadFamilyMembers();
+
+        // Event Listeners
+        familyMemberSelect.addEventListener('change', (e) => {
+            const selectedName = e.target.value;
+            currentMember = familyMembers.find(member => member.name === selectedName);
+            if (currentMember) {
+                startingBalance = currentMember.balance;
+                budgetTimeframe = currentMember.budgetTimeframe || 30;
+                balanceInput.value = startingBalance;
+                budgetTimeframeSelect.value = budgetTimeframe;
+                updateBudgetInfo();
+                debug(`Selected family member: ${currentMember.name}`);
+                showToast(`Selected family member: ${currentMember.name}`);
+            }
+        });
+
+        addFamilyMemberBtn.addEventListener('click', () => {
+            addMemberModal.style.display = 'block';
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            addMemberModal.style.display = 'none';
+        });
+
+        submitNewMemberBtn.addEventListener('click', () => {
+            const newMemberName = newMemberNameInput.value.trim();
+            if (newMemberName) {
+                addNewFamilyMember(newMemberName);
+                newMemberNameInput.value = '';
+                addMemberModal.style.display = 'none';
+            } else {
+                showToast('Please enter a valid name');
+            }
+        });
+
+       setBalanceBtn.addEventListener('click', setBudget);
+        addExpenseBtn.addEventListener('click', addExpense);
+
+        budgetTimeframeSelect.addEventListener('change', () => {
+            budgetTimeframe = parseInt(budgetTimeframeSelect.value);
+            if (currentMember) {
+                updateBudgetInfo();
+            }
+        });
+
+        // Generate weekly report every day
+        setInterval(generateWeeklyReport, 24 * 60 * 60 * 1000);
+
+        // Initialize application
+        function initializeApp() {
+            loadFamilyMembers();
+            generateWeeklyReport();
+            debug('Application initialized');
+            showToast('Application initialized');
+        }
+
+        // Call initializeApp when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', initializeApp);
+
+        // Function to save expenses to localStorage
+        function saveExpenses() {
+            if (currentMember) {
+                currentMember.expenses = expenses;
+                localStorage.setItem('familyMembers', JSON.stringify(familyMembers));
+            }
+        }
+
+        // Function to load expenses from localStorage
+        function loadExpenses() {
+            if (currentMember && currentMember.expenses) {
+                expenses = currentMember.expenses;
+                updateRemainingBalance();
+            } else {
+                expenses = [];
+            }
+        }
+
+        // Update familyMemberSelect event listener to load expenses
+        familyMemberSelect.addEventListener('change', (e) => {
+            const selectedName = e.target.value;
+            currentMember = familyMembers.find(member => member.name === selectedName);
+            if (currentMember) {
+                startingBalance = currentMember.balance;
+                budgetTimeframe = currentMember.budgetTimeframe || 30;
+                balanceInput.value = startingBalance;
+                budgetTimeframeSelect.value = budgetTimeframe;
+                loadExpenses();
+                updateBudgetInfo();
+                debug(`Selected family member: ${currentMember.name}`);
+                showToast(`Selected family member: ${currentMember.name}`);
+            }
+        });
+
+        // Update addExpense function to save expenses
+        function addExpense() {
+            if (currentMember) {
+                const amount = parseFloat(expenseAmountInput.value);
+                const category = expenseCategorySelect.value;
+                if (amount && category) {
+                    expenses.push({ amount, category, date: new Date() });
+                    saveExpenses();
+                    updateRemainingBalance();
+                    expenseAmountInput.value = '';
+                    expenseCategorySelect.value = '';
+                    debug(`Expense added: ${formatCurrency(amount)} for ${category}`);
+                    showToast(`Expense added: ${formatCurrency(amount)} for ${category}`);
+                } else {
+                    showToast('Please enter both amount and category');
+                }
+            } else {
+                showToast('Please select a family member first');
+            }
+        }
+
+        // Function to check if daily limit is exceeded
+        function checkDailyLimit() {
+            if (currentMember) {
+                const today = new Date().toDateString();
+                const todayExpenses = expenses.filter(expense => new Date(expense.date).toDateString() === today);
+                const todayTotal = todayExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+                const dailyLimit = startingBalance / budgetTimeframe;
+                
+                if (todayTotal > dailyLimit) {
+                    showToast(`Warning: Daily limit exceeded by ${formatCurrency(todayTotal - dailyLimit)}`, 5000);
+                }
+            }
+        }
+
+        // Update addExpense function to check daily limit
+        addExpenseBtn.addEventListener('click', () => {
+            addExpense();
+            checkDailyLimit();
+        });
+
+        // Function to export data as JSON
+        function exportData() {
+            const data = JSON.stringify(familyMembers, null, 2);
+            const blob = new Blob([data], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'family_budget_data.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Data exported successfully');
+        }
+
+        // Add export button
+        const exportBtn = document.createElement('button');
+        exportBtn.textContent = 'Export Data';
+        exportBtn.addEventListener('click', exportData);
+        document.querySelector('.container').appendChild(exportBtn);
+
+        // Function to import data from JSON
+        function importData(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        familyMembers = importedData;
+                        localStorage.setItem('familyMembers', JSON.stringify(familyMembers));
+                        loadFamilyMembers();
+                        showToast('Data imported successfully');
+                    } catch (error) {
+                        showToast('Error importing data. Please check the file format.');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // Add import button and file input
+        const importBtn = document.createElement('button');
+        importBtn.textContent = 'Import Data';
+        const importInput = document.createElement('input');
+        importInput.type = 'file';
+        importInput.accept = '.json';
+        importInput.style.display = 'none';
+        importInput.addEventListener('change', importData);
+        importBtn.addEventListener('click', () => importInput.click());
+        document.querySelector('.container').appendChild(importBtn);
+        document.querySelector('.container').appendChild(importInput);
+    </script>
+</body>
+</html>
